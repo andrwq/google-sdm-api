@@ -46,13 +46,28 @@ metadata {
     
     preferences {
         input 'defaultFanTime', 'number', title: 'Default Fan Time (s)', 'description': 'default length of time (in seconds) that the fan will run for `fanOn`, if an explicit time is not specified', required: true, defaultValue: 900, range: "1..43200"
+        input name: "infoOutput", type: "bool", title: "Enable Logging?", defaultValue: true
         input name: "debugOutput", type: "bool", title: "Enable Debug Logging?", defaultValue: false
+    }
+}
+
+private logInfo(msg) {
+    if (settings?.infoOutput) {
+        log.info "$msg"
     }
 }
 
 private logDebug(msg) {
     if (settings?.debugOutput) {
         log.debug "${device.label}: $msg"
+    }
+}
+
+private def checkDeviceState() {
+    // detect stale state and refresh if needed
+    if (device.currentValue('supportedThermostatFanModes').size() < 2) {
+        logInfo("refreshing device state")
+        parent.getDeviceData(device)
     }
 }
 
@@ -112,6 +127,12 @@ def off() {
 }
 
 def setCoolingSetpoint(temp) {
+    checkDeviceState()
+    if (device.currentValue('coolingSetpoint') == temp) {
+        logInfo("requested cooling setpoint is already set")
+        return
+    }
+    
     def mode = device.currentValue('thermostatMode')
     if (mode == 'cool') {
         parent.deviceSetTemperatureSetpoint(device, null, temp)
@@ -123,11 +144,17 @@ def setCoolingSetpoint(temp) {
         }
         parent.deviceSetTemperatureSetpoint(device, heat, temp)
     } else {
-        log.warn("Cannot setCoolingSetpoint in thermostatMode: ${mode}")
+        logDebug("Cannot setCoolingSetpoint in thermostatMode: ${mode}")
     }
 }
 
 def setHeatingSetpoint(temp) {
+    checkDeviceState()
+    if (device.currentValue('heatingSetpoint') == temp) {
+        logInfo("requested heating setpoint is already set")
+        return
+    }
+    
     def mode = device.currentValue('thermostatMode')
     if (mode == 'heat') {
         parent.deviceSetTemperatureSetpoint(device, temp, null)
@@ -139,11 +166,17 @@ def setHeatingSetpoint(temp) {
         }
         parent.deviceSetTemperatureSetpoint(device, temp, cool)
     } else {
-        log.warn("Cannot setHeatingSetpoint in thermostatMode: ${mode}")
+        logDebug("Cannot setHeatingSetpoint in thermostatMode: ${mode}")
     }
 }
 
 def setHeatCoolSetpoint(heat, cool) {
+    checkDeviceState()
+    if (device.currentValue('heatingSetpoint') == heat && device.currentValue('coolingSetpoint') == cool) {
+        logInfo("requested heating and cooling setpoints are already set")
+        return
+    }
+    
     def mode = device.currentValue('thermostatMode')
     if (mode == 'auto') {
         def tempMovement = checkDeadband(heat, cool)
@@ -153,7 +186,7 @@ def setHeatCoolSetpoint(heat, cool) {
             log.error("Heat/Cool setpoints require a minimum deadband of 1.5*C or 2.7*F -- inputs: ${heat} / ${cool}")
         }
     } else {
-        log.warn("Cannot setHeatCoolSetpoint in thermostatMode: ${mode}")
+        logDebug("Cannot setHeatCoolSetpoint in thermostatMode: ${mode}")
     }
 }
 

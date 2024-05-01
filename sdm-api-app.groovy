@@ -56,6 +56,12 @@ mappings {
     }
 }
 
+private logInfo(msg) {
+    if (settings?.infoOutput) {
+        log.info "$msg"
+    }
+}
+
 private logDebug(msg) {
     if (settings?.debugOutput) {
         log.debug "$msg"
@@ -82,6 +88,7 @@ def mainPage() {
         }
         getGoogleDriveOptions()
         section{
+            input name: "infoOutput", type: "bool", title: "Enable Logging?", defaultValue: true, submitOnChange: true
             input name: "debugOutput", type: "bool", title: "Enable Debug Logging?", defaultValue: false, submitOnChange: true
         }
         
@@ -232,7 +239,7 @@ def getCredentials() {
 }
 
 def handleAuthRedirect() {
-    log.info('successful redirect from google')
+    logInfo('successful redirect from google')
     unschedule(refreshLogin)
     def authCode = params.code
     String err = login(authCode)
@@ -266,7 +273,7 @@ def mainPageLink() {
 }
 
 def updated() {
-    log.info 'Google SDM API updating'
+    logInfo('Google SDM API updating')
     rescheduleLogin()
     runEvery10Minutes checkGoogle
     schedule('0 0 23 ? * *', driveRetentionJob)
@@ -274,7 +281,7 @@ def updated() {
 }
 
 def installed() {
-    log.info 'Google SDM API installed'
+    logInfo('Google SDM API installed')
     //initialize()
     createAccessToken()
     runEvery10Minutes checkGoogle
@@ -283,7 +290,7 @@ def installed() {
 }
 
 def uninstalled() {
-    log.info 'Google SDM API uninstalling'
+    logInfo('Google SDM API uninstalling')
     removeChildren()
     deleteEventSubscription()
     unschedule()
@@ -291,7 +298,7 @@ def uninstalled() {
 }
 
 def initialize(evt) {
-    log.debug(evt)
+    logDebug(evt)
     recover()
 }
 
@@ -312,7 +319,7 @@ def rescheduleLogin() {
 }
 
 def login(String authCode) {
-    log.info('Getting access_token from Google')
+    logInfo('Getting access_token from Google')
     def creds = getCredentials()
     def uri = 'https://www.googleapis.com/oauth2/v4/token'
     def query = [
@@ -334,7 +341,7 @@ def login(String authCode) {
 }
 
 def refreshLogin() {
-    log.info('Refreshing access_token from Google')
+    logInfo('Refreshing access_token from Google')
     def creds = getCredentials()
     def uri = 'https://www.googleapis.com/oauth2/v4/token'
     def query = [
@@ -389,9 +396,9 @@ def appButtonHandler(btn) {
 
 private void discover(refresh=false) {
     if (refresh) {
-        log.info("Refreshing all device states")
+        logInfo("Refreshing all device states")
     } else {
-        log.info("Discovery started")
+        logInfo("Discovery started")
     }
     def uri = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/' + projectId + '/devices'
     def headers = [ Authorization: 'Bearer ' + state.googleAccessToken ]
@@ -597,13 +604,13 @@ def processCameraEvents(com.hubitat.app.DeviceWrapper device, Map events, String
 }
 
 def createEventSubscription() {
-    log.info('Creating Google pub/sub event subscription')
+    logInfo('Creating Google pub/sub event subscription')
     def params = buildSubscriptionRequest()
     asynchttpPut(putResponse, params, [params: params])
 }
 
 def retryEventSubscription() {
-    log.info('Retrying Google pub/sub event subscription, which failed previously')
+    logInfo('Retrying Google pub/sub event subscription, which failed previously')
     createEventSubscription()
 }
 
@@ -630,7 +637,7 @@ def buildSubscriptionRequest() {
 def putResponse(resp, data) {
     def respCode = resp.getStatus()
     if (respCode == 409) {
-        log.info('createEventSubscription returned status code 409 -- subscription already exists')
+        logInfo('createEventSubscription returned status code 409 -- subscription already exists')
     } else if (respCode != 200) {
         def respError = ''
         try {
@@ -653,7 +660,7 @@ def putResponse(resp, data) {
 }
 
 def updateEventSubscription() {
-    log.info('Updating Google pub/sub event subscription')
+    logInfo('Updating Google pub/sub event subscription')
     def params = buildSubscriptionRequest()
     params.body = [subscription: params.body]
     params.body.updateMask = 'messageRetentionDuration,retryPolicy'
@@ -739,7 +746,7 @@ def postEvents() {
 
 void removeChildren() {
     def children = getChildDevices()
-    log.info("Deleting all child devices: ${children}")
+    logInfo("Deleting all child devices: ${children}")
     children.each {
         if (it != null) {
             deleteChildDevice it.getDeviceNetworkId()
@@ -748,29 +755,29 @@ void removeChildren() {
 }
 
 void deleteEventSubscription() {
-    log.info('Deleting Google pub/sub event subscription')
+    logInfo('Deleting Google pub/sub event subscription')
     def creds = getCredentials()
     def uri = 'https://pubsub.googleapis.com/v1/projects/' + creds.project_id + '/subscriptions/hubitat-sdm-api'
     def headers = [ Authorization: 'Bearer ' + state.googleAccessToken ]
     def contentType = 'application/json'
     def params = [uri: uri, headers: headers, contentType: contentType]
     httpDelete(params) { response ->
-        log.info("Deleting event subscription: response code ${response.getStatus()}")
+        logInfo("Deleting event subscription: response code ${response.getStatus()}")
     }
 }
 
 def logToken() {
-    log.debug("Access Token: ${state.googleAccessToken}")
+    logDebug("Access Token: ${state.googleAccessToken}")
 }
 
 def refreshAll() {
-    log.info('Dropping stale events with timestamp < now, and refreshing devices')
+    logInfo('Dropping stale events with timestamp < now, and refreshing devices')
     state.lastRecovery = now()
     discover(refresh=true)
 }
 
 def getDeviceData(com.hubitat.app.DeviceWrapper device) {
-    log.info("Refresh device details for ${device}")
+    logInfo("Refresh device details for ${device}")
     def deviceId = device.getDeviceNetworkId()
     def uri = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/' + projectId + '/devices/' + deviceId
     def headers = [ Authorization: "Bearer ${state.googleAccessToken}" ]
@@ -857,7 +864,7 @@ def deviceSendCommand(com.hubitat.app.DeviceWrapper device, String command, Map 
         //log at debug as it is triggered automatically
         logDebug("Sending ${command} to ${device} with params: ${cmdParams}")
     } else {
-        log.info("Sending ${command} to ${device} with params: ${cmdParams}")
+        logInfo("Sending ${command} to ${device} with params: ${cmdParams}")
     }
     def deviceId = device.getDeviceNetworkId()
     def uri = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/' + projectId + '/devices/' + deviceId + ':executeCommand'
@@ -996,7 +1003,7 @@ def handleCheckGoogle(resp, data) {
         state.online = false
     } else {
         if (!state.online) {
-            log.info('Google connection recovered')
+            logInfo('Google connection recovered')
             recover()
         }
         state.online = true
@@ -1144,7 +1151,7 @@ def createFolder(device) {
         name: "Nest images: ${device}"
     ]
     def params = [ uri: uri, headers: headers, contentType: contentType, body: body ]
-    log.info("Creating Google Drive folder for device: ${device}")
+    logInfo("Creating Google Drive folder for device: ${device}")
     asynchttpPost(handleCreateFolder, params, [device: device, params: params])
 }
 
@@ -1187,7 +1194,7 @@ def setFolderPermissions(folderId, device) {
         allowFileDiscovery: false
     ]
     def params = [ uri: uri, headers: headers, contentType: contentType, body: body ]
-    log.info("Setting Google Drive folder permissions for device: ${device}")
+    logInfo("Setting Google Drive folder permissions for device: ${device}")
     asynchttpPost(handleSetPermissions, params, [device: device, params: params])
 }
 
@@ -1224,7 +1231,7 @@ def getFilesToDelete(device) {
     def contentType = 'application/json'
     def query = [ q: "modifiedTime < '${retentionDate}' and '${folderId}' in parents" ]
     def params = [ uri: uri, headers: headers, contentType: contentType, query: query ]
-    log.info("Retrieving files to delete for device: ${device}, based on retentionDays: ${retentionDays}")
+    logInfo("Retrieving files to delete for device: ${device}, based on retentionDays: ${retentionDays}")
     logDebug(params)
     asynchttpGet(handleGetFilesToDelete, params, [device: device, params: params])
 }
@@ -1260,7 +1267,7 @@ def handleGetFilesToDelete(resp, data) {
         if (idList) {
             deleteFilesBatch(data.device, idList, nextPage)
         } else {
-            log.info("No files found to delete -- device: ${data.device}")
+            logInfo("No files found to delete -- device: ${data.device}")
         }
     }
 }
@@ -1281,7 +1288,7 @@ def deleteFilesBatch(device, idList, nextPage) {
     builder << '--END_OF_PART--'
     def body = builder.toString()
     def params = [ uri: uri, headers: headers, body: body, requestContentType: requestContentType ]
-    log.info("Sending batched file delete request -- count: ${idList.size()} -- for device: ${device}")
+    logInfo("Sending batched file delete request -- count: ${idList.size()} -- for device: ${device}")
     logDebug(body)
     asynchttpPost(handleDeleteFilesBatch, params, [device: device, params: params, nextPage: nextPage])
 }
@@ -1321,7 +1328,7 @@ def handleDeleteFilesBatch(resp, data) {
             }
         }*/
         if (data.nextPage) {
-            log.info("Additional pages of files to delete for device: ${data.device} -- will run query sequence again")
+            logInfo("Additional pages of files to delete for device: ${data.device} -- will run query sequence again")
             getFilesToDelete(data.device)
         }
     }
@@ -1329,7 +1336,7 @@ def handleDeleteFilesBatch(resp, data) {
 
 def driveRetentionJob() {
     if (googleDrive) {
-        log.info('Running Google Drive retention cleanup job')
+        logInfo('Running Google Drive retention cleanup job')
         def children = getChildDevices()
         children.each {
             if (it.hasCapability('ImageCapture')) {
@@ -1337,6 +1344,6 @@ def driveRetentionJob() {
             }
         }
     } else {
-        log.info('Google Drive is not used for image archive, skipping retention job')
+        logInfo('Google Drive is not used for image archive, skipping retention job')
     }
 }
